@@ -1,0 +1,168 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Necko Test Guidelines</title>
+  <link rel="stylesheet" href="https://stackedit.io/style.css" />
+</head>
+
+<body class="stackedit">
+  <div class="stackedit__html"><h1 id="networking-test-guidelines">Networking Test Guidelines</h1>
+<p>This is a high level document to introduce the different test types that are used in necko. The target audience is newcomer of necko team.</p>
+<h2 id="necko-test-types">Necko Test Types</h2>
+<p>We only introduce tests under <a href="https://searchfox.org/mozilla-central/source/netwerk/test">netwerk/test</a> folder in this section.</p>
+<ul>
+<li><a href="https://firefox-source-docs.mozilla.org/testing/chrome-tests/index.html">Chrome Tests</a>
+<ul>
+<li>We usually write chrome tests when the code to be tested needs a browser windows to load some particular resources.</li>
+<li>Path: <a href="https://searchfox.org/mozilla-central/source/netwerk/test/browser">netwerk/test/browser</a></li>
+</ul>
+</li>
+<li><a href="https://firefox-source-docs.mozilla.org/testing/webrender/index.html">Reftest</a>
+<ul>
+<li>Rarely used in necko.</li>
+</ul>
+</li>
+<li><a href="https://firefox-source-docs.mozilla.org/testing/mochitest-plain/index.html">Mochitest</a>
+<ul>
+<li>Used when the code to be tested can be triggered by WebIDL. e.g., WebSocket and XMLHttpRequest.</li>
+<li>Path: <a href="https://searchfox.org/mozilla-central/source/netwerk/test/mochitests">netwerk/test/mochitests</a></li>
+</ul>
+</li>
+<li><a href="https://firefox-source-docs.mozilla.org/testing/xpcshell/index.html#xpcshell-tests">XPCShell tests</a>
+<ul>
+<li>Mostly used in necko to test objects that can be accessed by JS. e.g., <code>nsIHttpChannel</code>.</li>
+<li>Path: <a href="https://searchfox.org/mozilla-central/source/netwerk/test/unit">netwerk/test/unit</a></li>
+</ul>
+</li>
+<li><a href="https://firefox-source-docs.mozilla.org/gtest/index.html">GTest</a>
+<ul>
+<li>Useful when the code doesn’t need a http server.</li>
+<li>Useful when writing code regarding to parsing strings. e.g., <a href="https://searchfox.org/mozilla-central/rev/0249c123e74640ed91edeabba00649ef4d929372/netwerk/test/gtest/TestServerTimingHeader.cpp">Parsing Server Timing Header</a></li>
+</ul>
+</li>
+<li><a href="https://firefox-source-docs.mozilla.org/testing/perfdocs/index.html">Performance tests</a>
+<ul>
+<li>Current tests in <a href="https://searchfox.org/mozilla-central/source/netwerk/test/perf">netwerk/test/perf</a> are all for testing <code>HTTP/3</code> code.</li>
+</ul>
+</li>
+</ul>
+<p>There are also <a href="https://firefox-source-docs.mozilla.org/web-platform/index.html">web-platform-tests</a> that is related to necko. We don’t usually write new <code>web-platform-tests</code>. However, we do have  lots of <code>web-platform-tests</code> for XHR, Fetch, and WebSocket.</p>
+<h2 id="running-necko-xpcshell-tests">Running Necko xpcshell-tests</h2>
+<ul>
+<li>
+<p>Local:</p>
+<p>Run all xpcshell-tests:</p>
+<pre><code>./mach xpcshell-test netwerk/test/unit
+</code></pre>
+<p>Note that xpcshell-tests are run in parallel, sometimes we want to run them sequentially for debugging.</p>
+<pre><code>./mach xpcshell-test --sequential netwerk/test/unit
+</code></pre>
+<p>Run a single tests:</p>
+<pre><code>./mach xpcshell-test netwerk/test/unit/test_http3.js
+</code></pre>
+<p>Run with socket process enabled:</p>
+<pre><code>./mach xpcshell-test --setpref="network.http.network_access_on_socket_process.enabled=true" netwerk/test/unit/test_http3.js
+</code></pre>
+<p>We usually debug networking issues with <code>HTTP Logging</code>. To enable logging when running tests:</p>
+<pre><code>MOZ_LOG=nsHttp:5 ./mach xpcshell-test netwerk/test/unit/test_http3.js
+</code></pre>
+</li>
+<li>
+<p>Remote:</p>
+<p>First of all, we need to know <a href="https://firefox-source-docs.mozilla.org/tools/try/selectors/fuzzy.html">Fuzzy Selector</a>, which is the tool we use to select which test to run on try. If you already know that your code change can be covered by necko xpcshell-tests, you can use the following command to run all tests in <code>netwerk/test/unit</code> on try.</p>
+<pre><code>./mach try fuzzy netwerk/test/unit
+</code></pre>
+<p>Run a single test on try:</p>
+<pre><code>./mach try fuzzy netwerk/test/unit/test_http3.js
+</code></pre>
+<p>Sometimes we want to debug the failed test on try with logging enabled:</p>
+<pre><code>./mach try fuzzy --env "MOZ_LOG=nsHttp:5,nsHostResolver:5" netwerk/tesst/unit/test_http3.js
+</code></pre>
+<p>Note that it’s not usually a good idea to enabling logging when running all tests in a folder on try, since the raw log file can be really huge. The log file might be not available if the size exceeds the limit on try.<br>
+In the case that your code change is too generic or you are not sure which tests to run, you can use <a href="https://firefox-source-docs.mozilla.org/tools/try/selectors/auto.html">Auto Selector</a> to let it select tests for you.</p>
+</li>
+</ul>
+<h2 id="debugging-intermittent-test-failures">Debugging intermittent test failures</h2>
+<p>There are a lot of intermittent failures on try (usually not able to reproduce locally). Debugging these failures can be really annoying and time consuming. Here are some general guidelines to help you debug intermittent failures more efficiently.</p>
+<ul>
+<li>Identify whether the failure is caused by your code change.
+<ul>
+<li>We can check the failure summery on try to see if there is already a bug filed for this test failure. If yes, it’s likely this is not caused by your code change.</li>
+<li>Re-trigger the failed test a few times and see if it passed. This can be easily done by clicking the <code>Push Health</code> button.</li>
+<li>To re-run the failed test suite more times, you could add <code>rebuild</code> option  to <code>./mach try</code>. For example, the following command allows to run necko xpcshell-tests 20 times on try.</li>
+</ul>
+<pre><code>	./mach try fuzzy netwerk/test/unit --rebuild 20
+</code></pre>
+</li>
+<li>In the case that we really need to debug an intermittent test failure, see this <a href="https://firefox-source-docs.mozilla.org/devtools/tests/debugging-intermittents.html">document</a> first for some general tips. Unfortunately, there is no easy way to debug this. One can try to isolate the failed test first and enable <code>HTTP logging</code> on try to collect the log for further analysis.</li>
+</ul>
+<h2 id="writing-necko-xpcshell-tests">Writing Necko XPCShell tests</h2>
+<p>The most typical form of necko xpcsehll-test is creating an HTTP server and test your code by letting the server return some specific responses (e.g., <code>103 Early Hint</code>). We will only introduce how to write this kind of test in this document.</p>
+<ul>
+<li>
+<p>Code at server side</p>
+<p>After <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1756557">bug 1756557</a>, it is possible to create a <code>nodejs</code> HTTP server in your test code. This saves us some time for writing code at the server side by reusing the HTTP module provided by <code>nodejs</code>.<br>
+This is what it looks like to create a simple HTTP server:</p>
+<pre><code>  let server = new NodeHTTPServer();
+  await server.start();
+  registerCleanupFunction(async () =&gt; {
+    await server.stop();
+  });
+  await server.registerPathHandler("/test", (req, resp) =&gt; {
+    resp.writeHead(200);
+    resp.end("done");
+  });
+</code></pre>
+<p>We can also create a <code>HTTP/2</code> server easily by replacing <code>NodeHTTPServer</code> with <code>NodeHTTP2Server</code> and adding the server certification.</p>
+<pre><code>  let certdb = Cc["@mozilla.org/security/x509certdb;1"].getService(
+    Ci.nsIX509CertDB
+  );
+  addCertFromFile(certdb, "http2-ca.pem", "CTu,u,u");
+  let server = new NodeHTTP2Server();
+</code></pre>
+</li>
+<li>
+<p>Code at client side</p>
+<p>The recommend way is to create and open an HTTP channel and handle the response with a <code>Promise</code> asynchronously.<br>
+The code would be like:</p>
+<pre><code>  function makeChan(uri) {
+      let chan = NetUtil.newChannel({uri,
+        loadUsingSystemPrincipal: true,
+      }).QueryInterface(Ci.nsIHttpChannel);
+      chan.loadFlags = Ci.nsIChannel.LOAD_INITIAL_DOCUMENT_URI;
+      return chan;
+  }
+  let chan = makeChan(`http://localhost:${server.port()}/test`);
+  let req = await new Promise(resolve =&gt; {
+    chan.asyncOpen(new ChannelListener(resolve, null, CL_ALLOW_UNKNOWN_CL));
+  });
+</code></pre>
+<p>This is what it looks like to put everything together:</p>
+<pre><code>add_task(async function test_http() {
+  let server = new NodeHTTPServer();
+  await server.start();
+  registerCleanupFunction(async () =&gt; {
+    await server.stop();
+  });
+  await server.registerPathHandler("/test", (req, resp) =&gt; {
+    resp.writeHead(200);
+    resp.end("done");
+  });
+  let chan = makeChan(`http://localhost:${server.port()}/test`);
+  let req = await new Promise(resolve =&gt; {
+    chan.asyncOpen(new ChannelListener(resolve, null, CL_ALLOW_UNKNOWN_CL));
+  });
+  equal(req.status, Cr.NS_OK);
+  equal(req.QueryInterface(Ci.nsIHttpChannel).responseStatus, 200);
+  equal(req.QueryInterface(Ci.nsIHttpChannel).protocolVersion, "http/1.1");
+});
+</code></pre>
+</li>
+</ul>
+</div>
+</body>
+
+</html>
